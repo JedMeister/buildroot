@@ -8,6 +8,18 @@ HOST_RELEASE := $(HOST_DISTRO)/$(HOST_CODENAME)
 HOST_ARCH := $(shell dpkg --print-architecture)
 SHELL := /bin/bash
 
+ifdef SUDO_USER
+$(info running as sudo)
+SUDO := running as sudo - set FAB_PATH explicitly
+endif
+
+ifndef FAB_PATH
+$(error FAB_PATH is not set $(SUDO))
+else
+BOOTSTRAPS_PATH ?= $(FAB_PATH)/bootstraps
+BUILDROOTS_PATH ?= $(FAB_PATH)/buildroots
+endif
+
 ifndef RELEASE
 $(info RELEASE not defined - falling back to system: '$(HOST_RELEASE)')
 RELEASE := $(HOST_RELEASE)
@@ -17,6 +29,9 @@ ifndef FAB_ARCH
 $(info FAB_ARCH not defined - falling back to system: '$(HOST_ARCH)')
 FAB_ARCH := $(HOST_ARCH)
 endif
+
+CHROOT_DIR = $(shell basename $(RELEASE))-$(FAB_ARCH)
+BOOTSTRAP ?= $(BOOTSTRAPS_PATH)/$(CHROOT_DIR)
 
 CERT_PATH := usr/local/share/ca-certificates
 
@@ -42,6 +57,11 @@ define bootstrap/post
 	if [ -n "$(TKL_TESTING)" ]; then \
 		echo "export TKL_TESTING=y" >> $O/bootstrap/turnkey-buildenv; \
 	fi
+	if [ -n "$(APT_PROXY_OVERRIDE)" ]; then \
+		echo "export APT_PROXY_OVERRIDE=$(APT_PROXY_OVERRIDE)" >> $O/bootstrap/turnkey-buildenv; \
+	elif [ -n "$(NO_PROXY)" ]; then \
+		echo "export NO_PROXY=$(NO_PROXY)" >> $O/bootstrap/turnkey-buildenv; \
+	fi
 	fab-apply-overlay $(COMMON_OVERLAYS_PATH)/bootstrap_apt $O/bootstrap;
 	fab-chroot $O/bootstrap "echo nameserver 8.8.8.8 > /etc/resolv.conf";
 	fab-chroot $O/bootstrap "echo nameserver 8.8.4.4 >> /etc/resolv.conf";
@@ -60,7 +80,8 @@ define root.patched/cleanup
 endef
 
 install: pkg_install
-	rsync --delete -Hac $O/root.patched/ $(FAB_PATH)/buildroots/$$(basename $$RELEASE)-$$FAB_ARCH/
+	mkdir -p $(BUILDROOTS_PATH)
+	rsync --delete -Hac $O/root.patched/ $(BUILDROOTS_PATH)/$(CHROOT_DIR)/
 
 pkg_install: normal_pkg_install
 ifdef NO_TURNKEY_APT_REPO

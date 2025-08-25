@@ -18,7 +18,7 @@ TurnKey repos (this should generally be the case).::
 
 By default ``make`` builds to the ``pkg_install`` target, if you intend on using
 this buildroot directly, you can build straight to the ``install`` target (which
-installs the buildroot to ``$FAB_PATH/buildroots/$(basename $RELEASE)``::
+installs the buildroot to ``$FAB_PATH/buildroots/$(basename $RELEASE)-$FAB_ARCH``::
 
     make install
 
@@ -45,7 +45,7 @@ will be cloned there from GitHub (assuming internet access).
 
 If all the required TurnKey dependencies are available, but only in the
 turnkey-testing repo (as is likely early in the transition process), then
-set TKL_TESTING=y. E.g.::
+instead set TKL_TESTING=y. E.g.::
 
     export RELEASE=debian/::CODENAME::
     make clean
@@ -59,15 +59,46 @@ transition is essentially the same as a normal build. I.e.::
     make clean
     make install
 
+Building on a vanilla Debian system
+-----------------------------------
+
+It is possible to build on a vanilla Debian system, however currently root is
+needed, so run with sudo. This also means that any build-env vars need to be
+explicitly passed via the commandline. E.g.:
+
+    sudo RELEASE=debian/trixie FAB_PATH=$FAB_PATH make clean
+    sudo RELEASE=debian/trixie FAB_PATH=$FAB_PATH OTHER_ENV_VARS=... make install
+
+Ideally things will be updated to run as a normal user at some point, but until
+then, please be aware that the resulting buildroot will be owned by root.
+
+See below for other available env vars.
+
 Copy generated buildroot to buildroots folder
 ---------------------------------------------
 
 Once the buildroot is built, then it needs to be copied to the desired
 location (default: ${FAB_PATH}/buildroots/::CODENAME::).
 
-As noted above, whether building a transition or not the ``install`` target
+As noted above, whether building a transition or not, the ``install`` target
 does this for you. I.e.::
 
     make install
+
+Build env vars
+--------------
+
+RELEASE=                - release to build; DISTRO/CODENAME
+                          e.g. 'debian/trixie'
+BOOTSTRAP=              - path to bootstrap dir
+                          (default: $FAB_PATH/bootstraps/CODENAME-$FAB_ARCH)
+NO_TURNKEY_APT_REPO=y   - disable TurnKey apt repositories completely
+TKL_TESTING=y           - enable $RELEASE-testing apt repository
+APT_PROXY_OVERRIDE=     - set custom proxy port (or 'disable' to disable proxy)
+NO_PROXY=y              - same as APT_PROXY_OVERRIDE='disable'
+FAB_ARCH=               - architecture to build; defaults to host arch
+                          current supported arch: amd64, arm64
+FAB_SHARE_PATH=         - path to fab share directory (where product.mk can be
+                          found - defaults to /usr/share/fab)
 
 .. _bootstrap: https://github.com/turnkeylinux/bootstrap
