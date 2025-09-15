@@ -1,8 +1,9 @@
 build-essential
+dpkg-dev
 fakeroot
 debhelper
 cdbs
-git                     /* git-core is now virtual pkg provided by git */
+git
 aptitude
 docbook-utils
 texlive-formats-extra   /* provides virtual pkg jadetex - docbook-utils dep */
@@ -13,9 +14,9 @@ lsb-release
 faketime
 
 /* pythondialog */
-python3-all-dev         /* include py3 tools now in buster */
-python3-all             /* include py3 tools now in buster */
+python3-all-dev
+python3-all
 dh-python
-python3-setuptools
-python3-typing-extensions
+pybuild-plugin-pyproject    /* required for python pkgs using pyproject.toml */
+python3-setuptools          /* deprecated, but leave for now... */
 python3-pycurl
