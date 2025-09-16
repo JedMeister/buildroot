@@ -1,16 +1,38 @@
 #!/usr/bin/make -f
-# Copyright (c) 2020-2021 TurnKey GNU/Linux - https://www.turnkeylinux.org
+# Copyright (c) 2020-2025 TurnKey GNU/Linux - https://www.turnkeylinux.org
 
 HOST_DISTRO := $(shell lsb_release -si | tr [A-Z] [a-z])
 HOST_CODENAME := $(shell lsb_release -sc)
 HOST_DEB_VER := $(shell lsb_release -sr)
 HOST_RELEASE := $(HOST_DISTRO)/$(HOST_CODENAME)
+HOST_ARCH := $(shell dpkg --print-architecture)
 SHELL := /bin/bash
+
+ifdef SUDO_USER
+$(info running as sudo)
+SUDO := running as sudo - set FAB_PATH explicitly
+endif
+
+ifndef FAB_PATH
+$(error FAB_PATH is not set $(SUDO))
+else
+BOOTSTRAPS_PATH ?= $(FAB_PATH)/bootstraps
+BUILDROOTS_PATH ?= $(FAB_PATH)/buildroots
+endif
 
 ifndef RELEASE
 $(info RELEASE not defined - falling back to system: '$(HOST_RELEASE)')
 RELEASE := $(HOST_RELEASE)
 endif
+
+ifndef FAB_ARCH
+$(info FAB_ARCH not defined - falling back to system: '$(HOST_ARCH)')
+FAB_ARCH := $(HOST_ARCH)
+endif
+
+CHROOT_DIR = $(shell basename $(RELEASE))-$(FAB_ARCH)
+BOOTSTRAP ?= $(BOOTSTRAPS_PATH)/$(CHROOT_DIR)
+
 CERT_PATH := usr/local/share/ca-certificates
 
 # transitional related
@@ -27,11 +49,18 @@ include $(FAB_SHARE_PATH)/product.mk
 define bootstrap/post
 	echo "export RELEASE=$(RELEASE)" > $O/bootstrap/turnkey-buildenv;
 	echo "export HOST_DEB_VER=$(HOST_DEB_VER)" >> $O/bootstrap/turnkey-buildenv;
+	echo "export HOST_ARCH=$(HOST_ARCH)" >> $O/bootstrap/turnkey-buildenv;
+	echo "export FAB_ARCH=$(FAB_ARCH)" >> $O/bootstrap/turnkey-buildenv;
 	if [ -n "$(NO_TURNKEY_APT_REPO)" ]; then \
 		echo "export NO_TURNKEY_APT_REPO=y" >> $O/bootstrap/turnkey-buildenv; \
 	fi
 	if [ -n "$(TKL_TESTING)" ]; then \
 		echo "export TKL_TESTING=y" >> $O/bootstrap/turnkey-buildenv; \
+	fi
+	if [ -n "$(APT_PROXY_OVERRIDE)" ]; then \
+		echo "export APT_PROXY_OVERRIDE=$(APT_PROXY_OVERRIDE)" >> $O/bootstrap/turnkey-buildenv; \
+	elif [ -n "$(NO_PROXY)" ]; then \
+		echo "export NO_PROXY=$(NO_PROXY)" >> $O/bootstrap/turnkey-buildenv; \
 	fi
 	fab-apply-overlay $(COMMON_OVERLAYS_PATH)/bootstrap_apt $O/bootstrap;
 	fab-chroot $O/bootstrap "echo nameserver 8.8.8.8 > /etc/resolv.conf";
@@ -43,15 +72,16 @@ define bootstrap/post
 endef
 
 define root.patched/cleanup
-        # kill stray processes
-        fuser -k $O/root.patched || true;\
-		if [ -f $O/root.patched/turnkey-buildenv ]; then\
-			echo "note this is a transitional build, some functionality will be disabled";\
-		fi
+	# kill stray processes
+	fuser -k $O/root.patched || true;\
+	if [ -f $O/root.patched/turnkey-buildenv ]; then\
+		echo "note this is a transitional build, some functionality will be disabled";\
+	fi
 endef
 
 install: pkg_install
-	rsync --delete -Hac $O/root.patched/ $(FAB_PATH)/buildroots/$$(basename $$RELEASE)/
+	mkdir -p $(BUILDROOTS_PATH)
+	rsync --delete -Hac $O/root.patched/ $(BUILDROOTS_PATH)/$(CHROOT_DIR)/
 
 pkg_install: normal_pkg_install
 ifdef NO_TURNKEY_APT_REPO
@@ -59,6 +89,10 @@ pkg_install: transition_pkg_install
 else
 ifneq ($(HOST_RELEASE),$(RELEASE))
 $(info # transition detected - building $(RELEASE) on $(HOST_RELEASE))
+$(info # to disable TKL apt repos rerun with NO_TURNKEY_APT_REPO=y set)
+endif
+ifneq ($(HOST_ARCH),$(FAB_ARCH))
+$(info # build on foreign architecture detected - building $(FAB_ARCH) on $(HOST_ARCH))
 $(info # to disable TKL apt repos rerun with NO_TURNKEY_APT_REPO=y set)
 endif
 endif
